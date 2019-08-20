@@ -1,0 +1,298 @@
+---
+title: "DADA2"
+author: "Paige Varner"
+date: "August 19, 2019"
+output: html_document
+---
+
+
+
+# Setup
+## Load Libraries
+```{r libraries, message=FALSE, warning=FALSE}
+library(dada2)
+library(readr)
+library(stringr)
+library(dplyr)
+library(tibble)
+library(magrittr)
+library(phyloseq)
+library(ggplot2)
+library(fs)
+library(reshape)
+```
+
+
+
+## Paths, Directories, and Shell Variables
+
+```{r data_path}
+demux.dir = file.path("Data/alex_soils")
+scratch.dir = file.path("dada2")
+map.file = file.path("Data/GoMRI_mapfile.csv")
+# make directory for output
+ps.rds = file.path(scratch.dir, "alex_soils.rds")
+silva.ref = "/data/references/dada/silva_nr_v128_train_set.fa.gz"
+silva.species.ref = "/data/references/dada/silva_species_assignment_v128.fa.gz"
+
+#no data.dir
+```
+
+
+
+## Checking Files 
+Let's make sure that our demultiplexed files are all where we expect them
+
+```{r view_demuxed_files}
+list.files(demux.dir)
+```
+
+
+
+## Filter and Trim
+
+```{r}
+# Forward and reverse fastq filenames have format: SAMPLENAME.R1.fastq and SAMPLENAME.R2.fastq
+fnFs <- sort(list.files(demux.dir, pattern="L001_R1_001.fastq", full.names = TRUE))
+fnRs <- sort(list.files(demux.dir, pattern="L001_R2_001.fastq", full.names = TRUE))
+# Extract sample names, assuming filenames have format: SAMPLENAME.X.fastq, where X is reverse or forward
+# sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 1)
+sample.names = fnFs %>% 
+  basename %>%
+  str_replace("_L001_R1_001.fastq","") 
+
+sample.names = gsub("_.*", "", sample.names)
+```
+
+
+Check work
+```{r}
+sample.names
+print(fnFs)
+print(fnRs)
+```
+
+
+## Examine quality profiles of forward and reverse reads
+
+## Forward Read Quality Profile
+```{r see-quality-F-all}
+plotQualityProfile(fnFs[1:2])
+```
+
+
+## Reverse Read Quality Profile
+Now we visualize the quality profile of the reverse reads:
+```{r see-quality-F-all}
+plotQualityProfile(fnRs[1:2])
+```
+
+
+
+## Perform filtering and trimming
+
+### Generate filenames for the filtered fastq.gz files.
+
+```{r filt-names}
+filt_path <- file.path("dada2/filtered") # Place filtered files in filtered/ subdirectory
+filtFs <- file.path(filt_path, paste0(sample.names, "_F_filt.fastq.gz"))
+filtRs <- file.path(filt_path, paste0(sample.names, "_R_filt.fastq.gz"))
+print(filtFs)
+```
+
+
+### Filter the forward and reverse reads
+
+```{r filter, message=FALSE, warning=FALSE}
+out <- filterAndTrim(fnFs, filtFs, fnRs, filtRs, trimLeft=15, truncLen=c(225,215),
+              maxN=0, maxEE=c(2,2), truncQ=2, rm.phix=TRUE,
+              compress=TRUE, multithread=FALSE) # On Windows set multithread=FALSE
+head(out)
+```
+
+
+
+### Tweak Filtered FASTQ list
+
+```{r}
+filtFs = filtFs[file_exists(filtFs)]
+filtRs = filtRs[file_exists(filtRs)]
+filtFs %>% 
+  basename %>%
+  str_replace("_F_filt.fastq.gz","") ->
+  sample.names
+
+sample.names
+```
+
+
+
+## Learn the Error Rates
+
+```{r}
+errF <- learnErrors(filtFs, multithread=TRUE)
+errR <- learnErrors(filtRs, multithread=TRUE)
+```
+
+Visualize the estimated error rates:
+```{r plot-errors, warning=FALSE}
+plotErrors(errF, nominalQ=TRUE)
+```
+
+
+
+## Dereplication
+
+```{r dereplicate_tryagain, message=FALSE}
+derepFs <- derepFastq(filtFs, verbose=TRUE)
+derepRs <- derepFastq(filtRs, verbose=TRUE)
+```
+
+### Rename derep objects
+
+```{r}
+names(derepFs) <- sample.names
+names(derepRs) <- sample.names
+```
+
+
+
+## Sample Inference
+
+```{r dada}
+dadaFs <- dada(derepFs, err=errF, multithread=TRUE)
+dadaRs <- dada(derepRs, err=errR, multithread=TRUE)
+dadaFs[[1]]
+```
+
+
+## Merge paired reads
+
+```{r merge, message=FALSE}
+mergers <- mergePairs(dadaFs, derepFs, dadaRs, derepRs, verbose=TRUE)
+# Inspect the merger data.frame from the first sample
+head(mergers[[2]])
+```
+
+
+
+## Construct sequence table
+
+```{r seqtab}
+seqtab <- makeSequenceTable(mergers)
+```
+
+How many samples are there?  How many ASVs?
+```{r}
+dim(seqtab)
+```
+
+Let's check the size distribution of the ASVs we have inferred. 
+```{r}
+table(nchar(getSequences(seqtab)))
+```
+
+This removes all sequences that don't fall between 230 and 240 bp in length
+```{r}
+seqtab2=seqtab[,nchar(colnames(seqtab)) %in% seq(230,240)]
+```
+
+```{r}
+dim(seqtab2)
+```
+
+
+
+## Remove chimeras
+
+```{r chimeras, message=FALSE}
+seqtab.nochim <- removeBimeraDenovo(seqtab2, method="consensus", multithread=TRUE, verbose=TRUE)
+dim(seqtab.nochim)
+sum(seqtab.nochim)/sum(seqtab2)
+```
+
+
+## Track reads through the pipeline
+
+```{r track}
+getN <- function(x) sum(getUniques(x))
+track <- cbind(out, sapply(dadaFs, getN), sapply(dadaRs, getN), sapply(mergers, getN), rowSums(seqtab.nochim))
+# If processing a single sample, remove the sapply calls: e.g. replace sapply(dadaFs, getN) with getN(dadaFs)
+colnames(track) <- c("input", "filtered", "denoisedF", "denoisedR", "merged", "nonchim")
+rownames(track) <- sample.names
+head(track)
+```
+
+
+## Assign taxonomy
+
+Now you can assign taxonomy!  You should use this taxonomy reference files : `/data/references/dada/silva_nr_v128_train_set.fa.gz`
+
+```{r taxify}
+taxa <- assignTaxonomy(seqtab.nochim, silva.ref, multithread=TRUE)
+taxa.print <- taxa # Removing sequence rownames for display only
+rownames(taxa.print) <- NULL
+head(taxa.print)
+```
+
+
+
+# Phyloseq
+
+## Map Data
+First we need to load the map data using phyloseq's `sample_data()` function. `sample_data()` expects the sample identifiers to be rownames, but our map file has them as a column named "#SampleID", so we need to use a function called `column_to_rownames` to convert this column into rownames
+```{r load_map}
+meta.df = read_tsv(map.file, comment= "#q2")
+meta.df = meta.df[1:214,]
+colnames(meta.df)[colnames(meta.df) == 'SampleID'] <- 'Sample'
+meta.df = meta.df %>%
+  column_to_rownames("Sample") %>%
+  as.data.frame
+meta.df
+```
+
+## Make a Phyloseq Object
+
+```{r make-phyloseq}
+otus = otu_table(seqtab.nochim, taxa_are_rows=FALSE)
+sd = sample_data(meta.df)
+ps_alex_soils <- phyloseq(otus,
+               sd,
+               tax_table(taxa))
+```
+
+And `print` your phyloseq object to be sure it was created correctly
+```{r}
+ps_alex_soils
+```
+
+
+## Save Phyloseq to RDS
+
+```{r}
+saveRDS(ps_alex_soils, file = "phyloseq/ps_alex_soils.rds")
+```
+
+## Check Phyloseq RDS
+
+```{r}
+loaded.ps = readRDS("phyloseq/ps_alex_soils.rds")
+print(loaded.ps)
+```
+
+
+# Session Info
+Always print `sessionInfo` for reproducibility!
+```{r}
+sessionInfo()
+```
+
+
+
+
+
+
+
+
+
+
