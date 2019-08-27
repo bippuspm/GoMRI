@@ -1,9 +1,10 @@
 ---
-title: "DADA2"
+title: "Roots and leaves DADA2"
 author: "Paige Varner"
-date: "August 19, 2019"
+date: "8/27/2019"
 output: html_document
 ---
+
 
 
 
@@ -28,11 +29,11 @@ library(reshape)
 ## Paths, Directories, and Shell Variables
 
 ```{r data_path}
-demux.dir = file.path("Data/alex_soils/")
+demux.dir = file.path("Data/roots_leaves")
 scratch.dir = file.path("dada2")
 map.file = file.path("Data/GoMRI_mapfile.csv")
 # make directory for output
-ps.rds = file.path(scratch.dir, "alex_soils.rds")
+ps.rds = file.path(scratch.dir, "roots_leaves.rds")
 silva.ref = "Data/silva_nr_v128_train_set.fa.gz"
 silva.species.ref = "Data/silva_species_assignment_v128.fa.gz"
 
@@ -180,26 +181,26 @@ head(mergers[[2]])
 ## Construct sequence table
 
 ```{r seqtab}
-seqtab_alex_soils <- makeSequenceTable(mergers)
+seqtab_roots_leaves <- makeSequenceTable(mergers)
 ```
 
 How many samples are there?  How many ASVs?
 ```{r}
-dim(seqtab_alex_soils)
+dim(seqtab_roots_leaves)
 ```
 
 Let's check the size distribution of the ASVs we have inferred. 
 ```{r}
-table(nchar(getSequences(seqtab_alex_soils)))
+table(nchar(getSequences(seqtab_roots_leaves)))
 ```
 
 This removes all sequences that don't fall between ___ bp in length
 ```{r}
-seqtab2_alex_soils=seqtab_alex_soils[,nchar(colnames(seqtab_alex_soils)) %in% seq(276,295)]
+seqtab2_roots_leaves=seqtab_roots_leaves[,nchar(colnames(seqtab_roots_leaves)) %in% seq(276,295)]
 ```
 
 ```{r}
-dim(seqtab2_alex_soils)
+dim(seqtab2_roots_leaves)
 ```
 
 
@@ -207,9 +208,9 @@ dim(seqtab2_alex_soils)
 ## Remove chimeras
 
 ```{r chimeras, message=FALSE}
-seqtab_alex_soils.nochim <- removeBimeraDenovo(seqtab2_alex_soils, method="consensus", multithread=TRUE, verbose=TRUE)
-dim(seqtab_alex_soils.nochim)
-sum(seqtab_alex_soils.nochim)/sum(seqtab2_alex_soils)
+seqtab_roots_leaves.nochim <- removeBimeraDenovo(seqtab2_roots_leaves, method="consensus", multithread=TRUE, verbose=TRUE)
+dim(seqtab_roots_leaves.nochim)
+sum(seqtab_roots_leaves.nochim)/sum(seqtab2_roots_leaves)
 ```
 
 
@@ -217,7 +218,7 @@ sum(seqtab_alex_soils.nochim)/sum(seqtab2_alex_soils)
 
 ```{r track}
 getN <- function(x) sum(getUniques(x))
-track <- cbind(out, sapply(dadaFs, getN), sapply(dadaRs, getN), sapply(mergers, getN), rowSums(seqtab_alex_soils.nochim))
+track <- cbind(out, sapply(dadaFs, getN), sapply(dadaRs, getN), sapply(mergers, getN), rowSums(seqtab_roots_leaves.nochim))
 # If processing a single sample, remove the sapply calls: e.g. replace sapply(dadaFs, getN) with getN(dadaFs)
 colnames(track) <- c("input", "filtered", "denoisedF", "denoisedR", "merged", "nonchim")
 rownames(track) <- sample.names
@@ -230,17 +231,17 @@ head(track)
 Now you can assign taxonomy!  You should use this taxonomy reference files : `/data/references/dada/silva_nr_v128_train_set.fa.gz`
 
 ```{r taxify}
-taxa_alex_soils <- assignTaxonomy(seqtab_alex_soils.nochim, silva.ref, multithread=TRUE)
-taxa_alex_soils.print <- taxa_alex_soils # Removing sequence rownames for display only
-rownames(taxa_alex_soils.print) <- NULL
-head(taxa_alex_soils.print)
+taxa_roots_leaves <- assignTaxonomy(seqtab_roots_leaves.nochim, silva.ref, multithread=TRUE)
+taxa_roots_leaves.print <- taxa_roots_leaves # Removing sequence rownames for display only
+rownames(taxa_roots_leaves.print) <- NULL
+head(taxa_roots_leaves.print)
 ```
 
 
 ##Save seq table and tax table as rds
 ```{r}
-saveRDS(seqtab_alex_soils.nochim, file = "seqtab_alex_soils.Rds")
-saveRDS(taxa_alex_soils, file = "taxatab_alex_soils.Rds")
+saveRDS(seqtab_roots_leaves.nochim, file = "seqtab_roots_leaves.Rds")
+saveRDS(taxa_roots_leaves, file = "taxatab_roots_leaves.Rds")
 ```
 
 
@@ -255,74 +256,6 @@ saveRDS(taxa_alex_soils, file = "taxatab_alex_soils.Rds")
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# Phyloseq
-
-## Map Data
-First we need to load the map data using phyloseq's `sample_data()` function. `sample_data()` expects the sample identifiers to be rownames, but our map file has them as a column named "#SampleID", so we need to use a function called `column_to_rownames` to convert this column into rownames
-```{r load_map}
-meta.df = read_tsv(map.file, comment= "#q2")
-meta.df = meta.df[1:214,]
-colnames(meta.df)[colnames(meta.df) == 'SampleID'] <- 'Sample'
-meta.df = meta.df %>%
-  column_to_rownames("Sample") %>%
-  as.data.frame
-meta.df
-```
-
-## Make a Phyloseq Object
-
-```{r make-phyloseq}
-otus = otu_table(seqtab.nochim, taxa_are_rows=FALSE)
-sd = sample_data(meta.df)
-ps_alex_soils <- phyloseq(otus,
-               sd,
-               tax_table(taxa))
-```
-
-And `print` your phyloseq object to be sure it was created correctly
-```{r}
-ps_alex_soils
-```
-
-
-## Save Phyloseq to RDS
-
-```{r}
-saveRDS(ps_alex_soils, file = "phyloseq/ps_alex_soils.rds")
-```
-
-## Check Phyloseq RDS
-
-```{r}
-loaded.ps = readRDS("phyloseq/ps_alex_soils.rds")
-print(loaded.ps)
-```
-
-
-# Session Info
-Always print `sessionInfo` for reproducibility!
-```{r}
-sessionInfo()
-```
 
 
 
