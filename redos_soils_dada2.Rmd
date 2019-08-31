@@ -255,6 +255,69 @@ saveRDS(taxa_redos_soils, file = "taxatab_redos_soils.Rds")
 
 
 
+# Phyloseq
+
+##Read in tax, seq, and sample tables
+```{r}
+taxtab_redos_soils = readRDS("taxatab_redos_soils.Rds")
+seqtab_redos_soils = readRDS("seqtab_redos_soils.Rds")
+samtab_redos_soils = read_tsv("Data/mapfile_redos_soils.txt")
+map_2 = file.path("Data/mapfile_redos_soils.txt")
+```
+
+
+
+## Map Data
+First we need to load the map data using phyloseq's `sample_data()` function. `sample_data()` expects the sample identifiers to be rownames, but our map file has them as a column named "#SampleID", so we need to use a function called `column_to_rownames` to convert this column into rownames
+```{r load_map}
+meta.df.2 = read_tsv(map_2, comment= "#q2")
+meta.df.2 = meta.df.2[1:96,]
+colnames(meta.df.2)[colnames(meta.df.2) == 'SampleID'] <- 'SampleID'
+meta.df.2 = meta.df.2 %>%
+  column_to_rownames("SampleID") %>%
+  as.data.frame
+meta.df.2
+```
+
+## Make a Phyloseq Object
+
+```{r make-phyloseq}
+otus.2 = otu_table(seqtab_redos_soils, taxa_are_rows=FALSE)
+sd.2 = sample_data(meta.df.2)
+tax.2 = tax_table(taxtab_redos_soils)
+ps_redos_soils <- phyloseq(otus.2,
+               sd.2,
+               tax.2)
+```
+
+And `print` your phyloseq object to be sure it was created correctly
+```{r}
+ps_redos_soils
+```
+
+
+## Save Phyloseq to RDS
+
+```{r}
+saveRDS(ps_redos_soils, file = "phyloseq/ps_redos_soils.rds")
+```
+
+## Check Phyloseq RDS
+
+```{r}
+loaded.ps = readRDS("phyloseq/ps_redos_soils.rds")
+print(loaded.ps)
+```
+
+
+# Session Info
+Always print `sessionInfo` for reproducibility!
+```{r}
+sessionInfo()
+```
+
+
+
 
 
 

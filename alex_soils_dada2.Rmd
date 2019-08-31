@@ -30,7 +30,6 @@ library(reshape)
 ```{r data_path}
 demux.dir = file.path("Data/alex_soils/")
 scratch.dir = file.path("dada2")
-map.file = file.path("Data/GoMRI_mapfile.csv")
 # make directory for output
 ps.rds = file.path(scratch.dir, "alex_soils.rds")
 silva.ref = "Data/silva_nr_v128_train_set.fa.gz"
@@ -276,26 +275,37 @@ saveRDS(taxa_alex_soils, file = "taxatab_alex_soils.Rds")
 
 # Phyloseq
 
+##Read in tax, seq, and sample tables
+```{r}
+taxtab_alex_soils = readRDS("taxatab_alex_soils.Rds")
+seqtab_alex_soils = readRDS("seqtab_alex_soils.Rds")
+samtab_alex_soils = read_tsv("Data/mapfile_alex_soils.txt")
+map_1 = file.path("Data/mapfile_alex_soils.txt")
+```
+
+
+
 ## Map Data
 First we need to load the map data using phyloseq's `sample_data()` function. `sample_data()` expects the sample identifiers to be rownames, but our map file has them as a column named "#SampleID", so we need to use a function called `column_to_rownames` to convert this column into rownames
 ```{r load_map}
-meta.df = read_tsv(map.file, comment= "#q2")
-meta.df = meta.df[1:214,]
-colnames(meta.df)[colnames(meta.df) == 'SampleID'] <- 'Sample'
-meta.df = meta.df %>%
-  column_to_rownames("Sample") %>%
+meta.df.1 = read_tsv(map_1, comment= "#q2")
+meta.df.1 = meta.df.1[1:12,]
+colnames(meta.df.1)[colnames(meta.df.1) == 'SampleID'] <- 'SampleID'
+meta.df.1 = meta.df.1 %>%
+  column_to_rownames("SampleID") %>%
   as.data.frame
-meta.df
+meta.df.1
 ```
 
 ## Make a Phyloseq Object
 
 ```{r make-phyloseq}
-otus = otu_table(seqtab.nochim, taxa_are_rows=FALSE)
-sd = sample_data(meta.df)
-ps_alex_soils <- phyloseq(otus,
-               sd,
-               tax_table(taxa))
+otus.1 = otu_table(seqtab_alex_soils, taxa_are_rows=FALSE)
+sd.1 = sample_data(meta.df.1)
+tax.1 = tax_table(taxtab_alex_soils)
+ps_alex_soils <- phyloseq(otus.1,
+               sd.1,
+               tax.1)
 ```
 
 And `print` your phyloseq object to be sure it was created correctly

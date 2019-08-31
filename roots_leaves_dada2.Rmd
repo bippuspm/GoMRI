@@ -114,21 +114,6 @@ head(out)
 
 
 
-### Tweak Filtered FASTQ list
-
-```{r}
-filtFs = filtFs[file_exists(filtFs)]
-filtRs = filtRs[file_exists(filtRs)]
-filtFs %>% 
-  basename %>%
-  str_replace("_F_filt.fastq.gz","") ->
-  sample.names
-
-sample.names
-```
-
-
-
 ## Learn the Error Rates
 
 ```{r}
@@ -258,6 +243,74 @@ saveRDS(taxa_roots_leaves, file = "taxatab_roots_leaves.Rds")
 
 
 
+
+
+
+# Phyloseq
+
+##Read in tax, seq, and sample tables
+```{r}
+taxtab_roots_leaves = readRDS("taxatab_roots_leaves.Rds")
+seqtab_roots_leaves = readRDS("seqtab_roots_leaves.Rds")
+samtab_roots_leaves = read_tsv("Data/mapfile_roots_leaves.txt")
+map_3 = file.path("Data/mapfile_roots_leaves.txt")
+
+seqtab_redos_soils = readRDS("seqtab_redos_soils.Rds")
+```
+
+
+
+## Map Data
+First we need to load the map data using phyloseq's `sample_data()` function. `sample_data()` expects the sample identifiers to be rownames, but our map file has them as a column named "#SampleID", so we need to use a function called `column_to_rownames` to convert this column into rownames
+```{r load_map}
+meta.df.3 = read_tsv(map_3, comment= "#q2")
+meta.df.3 = meta.df.3[1:96,]
+colnames(meta.df.3)[colnames(meta.df.3) == 'SampleID'] <- 'SampleID'
+meta.df.3 = meta.df.3 %>%
+  column_to_rownames("SampleID") %>%
+  as.data.frame
+meta.df.3
+```
+
+## Make a Phyloseq Object
+
+```{r make-phyloseq}
+otus.3 = otu_table(seqtab_roots_leaves, taxa_are_rows=FALSE)
+sd.3 = sample_data(meta.df.3)
+tax.3 = tax_table(taxtab_roots_leaves)
+ps_roots_leaves <- phyloseq(otus.3,
+               sd.3,
+               tax.3)
+
+row.names(seqtab_roots_leaves)
+row.names(seqtab_redos_soils)
+```
+
+And `print` your phyloseq object to be sure it was created correctly
+```{r}
+ps_roots_leaves
+```
+
+
+## Save Phyloseq to RDS
+
+```{r}
+saveRDS(ps_roots_leaves, file = "phyloseq/ps_roots_leaves.rds")
+```
+
+## Check Phyloseq RDS
+
+```{r}
+loaded.ps = readRDS("phyloseq/ps_roots_leaves.rds")
+print(loaded.ps)
+```
+
+
+# Session Info
+Always print `sessionInfo` for reproducibility!
+```{r}
+sessionInfo()
+```
 
 
 
