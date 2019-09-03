@@ -238,14 +238,6 @@ saveRDS(taxa_roots_leaves, file = "taxatab_roots_leaves.Rds")
 
 
 
-
-
-
-
-
-
-
-
 # Phyloseq
 
 ##Read in tax, seq, and sample tables
@@ -311,6 +303,37 @@ Always print `sessionInfo` for reproducibility!
 ```{r}
 sessionInfo()
 ```
+
+
+
+
+
+
+
+#Merge all phyloseqs
+```{r}
+ps_alex_soils = readRDS("phyloseq/ps_alex_soils.rds")
+ps_redos_soils = readRDS("phyloseq/ps_redos_soils.rds")
+ps_roots_leaves = readRDS("phyloseq/ps_roots_leaves.rds")
+
+gomri.ps = merge_phyloseq(ps_alex_soils, ps_redos_soils, ps_roots_leaves)
+
+gomri.ps
+saveRDS(gomri.ps, file = "phyloseq/gomri_ps.rds")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
