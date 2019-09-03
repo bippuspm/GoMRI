@@ -1,0 +1,271 @@
+---
+title: "Relative abundance"
+author: "Paige Varner"
+date: "9/3/2019"
+output: html_document
+---
+
+
+
+#Load libraries
+```{r}
+library(readr)
+library(tibble)
+library(dplyr)
+library(vegan)
+library(phyloseq)
+library(ggplot2)
+install.packages("reshape")
+library(reshape)
+library(stringr)
+library(tidyr)
+library(magrittr)
+library(tools)
+```
+
+
+
+
+#Directories
+```{r}
+gomri.rds = "gomri_ps.rds"
+gomri.ps = readRDS("gomri_ps.rds")
+print(gomri.ps)
+```
+
+
+
+#Relative abundance
+
+##Transform OTU table
+```{r}
+gomri.ps.rel  = transform_sample_counts(gomri.ps, function(x) x / sum(x) )
+```
+
+
+
+
+#Prune samples that have less than 100 counts
+```{r}
+sample_min_count = 100
+gomri.ps %>%
+  prune_samples(sample_sums(.)>=sample_min_count, .) ->
+  gomri.100.ps
+sample_sums(gomri.ps) %>% sort
+gomri.100.ps.rel  = transform_sample_counts(gomri.100.ps, function(x) x / sum(x) )
+sample_sums(gomri.100.ps.rel)
+```
+
+
+
+#Relative abundance plot pruned to top 20 taxa
+```{r}
+top20 <- names(sort(taxa_sums(gomri.ps), decreasing=TRUE))[1:20]
+gomri.100.ps.rel %>%
+  transform_sample_counts(function(x) x / sum(x) ) %>%
+  prune_taxa(top20, .) ->
+  gomri.top20.ps.rel
+
+plot_bar(gomri.top20.ps.rel, fill="Phylum") +
+  labs(y = "Relative Abundance") +
+  geom_bar(aes(color=Phylum, fill=Phylum), stat="identity", position="stack")
+```
+
+
+
+
+#Relative abundance plot pruned to have a minimum average of 1% relative abundance
+```{r}
+mean_cutoff = 0.01
+mean_test = function(x) {
+  mean(x) >= mean_cutoff
+}
+gomri.100.ps.rel %>%
+  transform_sample_counts(function(x) x / sum(x) ) %>%
+  filter_taxa(mean_test, prune = TRUE) ->
+  gomri.min1.ps.rel
+
+plot_bar(gomri.min1.ps.rel, fill="Phylum") +
+  labs(y = "Relative Abundance") +
+  geom_bar(aes(color=Phylum, fill=Phylum), stat="identity", position="stack")
+```
+
+
+#Relative abundance plot pruned to have at least 5% abundance in 2 samples
+```{r}
+min_fraction = 0.05
+min_samples = 2
+gomri.minfrac.ps.rel = filter_taxa(gomri.100.ps.rel, 
+                       function(x) sum(x >= min_fraction) >= min_samples,
+                       prune=TRUE)
+ntaxa(gomri.minfrac.ps.rel)
+
+plot_bar(gomri.minfrac.ps.rel, fill="Phylum") +
+  labs(y = "Relative Abundance") +
+  geom_bar(aes(color=Phylum, fill=Phylum), stat="identity", position="stack")
+```
+
+
+
+#Relative abundance plot pruned to have a min count of 100 in at least 20% of samples
+```{r}
+min_count = 100
+min_sample_frac = 0.2
+filt_vec = filter_taxa(gomri.100.ps, 
+                       function(x) sum(x >= min_count) >= (min_sample_frac*length(x)))
+gomri.mincount.ps.rel = prune_taxa(filt_vec, gomri.ps.rel)
+ntaxa(gomri.mincount.ps.rel)
+
+plot_bar(gomri.mincount.ps.rel, fill="Phylum") +
+  labs(y = "Relative Abundance") +
+  geom_bar(aes(color=Phylum, fill=Phylum), stat="identity", position="stack")
+```
+
+
+
+
+*Going to use the minfrac to do overall comparisons*
+
+
+#Comparing between roots, leaves, soils
+
+
+#Comparing between oil history
+
+
+#Comparing between oil added
+
+
+#Comparing between timepoint
+
+
+#Soils
+
+##Subset from mincount filtered samples
+```{r}
+soils = subset_samples(gomri.mincount.ps.rel, location == "soil")
+```
+
+##Comparing between oil history
+```{r}
+plot_bar(soils, fill="Phylum") +
+  labs(y = "Relative Abundance") +
+  geom_bar(aes(color=Phylum, fill=Phylum), stat="identity", position="stack") + facet_grid(~oil_history, scale = "free_x") + theme_bw() + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+```
+
+
+##Comparing between oil added
+```{r}
+plot_bar(soils, fill="Phylum") +
+  labs(y = "Relative Abundance") +
+  geom_bar(aes(color=Phylum, fill=Phylum), stat="identity", position="stack") + facet_grid(~oil_added, scale = "free_x") + theme_bw() + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+```
+
+##Comparing between timepoint
+```{r}
+plot_bar(soils, fill="Phylum") +
+  labs(y = "Relative Abundance") +
+  geom_bar(aes(color=Phylum, fill=Phylum), stat="identity", position="stack") + facet_grid(~timepoint, scale = "free_x") + theme_bw() + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+```
+
+##Comparing between plant and no plant
+```{r}
+plot_bar(soils, fill="Phylum") +
+  labs(y = "Relative Abundance") +
+  geom_bar(aes(color=Phylum, fill=Phylum), stat="identity", position="stack") + facet_grid(~plant, scale = "free_x") + theme_bw() + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+```
+
+
+#Leaves
+
+##Subset from mincfrac filtered samples
+```{r}
+leaves = subset_samples(gomri.minfrac.ps.rel, location == "leaf")
+```
+
+##Comparing between oil history
+```{r}
+plot_bar(leaves, fill="Phylum") +
+  labs(y = "Relative Abundance") +
+  geom_bar(aes(color=Phylum, fill=Phylum), stat="identity", position="stack") + facet_grid(~oil_history, scale = "free_x") + theme_bw() + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+```
+
+##Comparing between oil added
+```{r}
+plot_bar(leaves, fill="Phylum") +
+  labs(y = "Relative Abundance") +
+  geom_bar(aes(color=Phylum, fill=Phylum), stat="identity", position="stack") + facet_grid(~oil_added, scale = "free_x") + theme_bw() + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+```
+
+
+##Comparing between timepoint
+```{r}
+plot_bar(leaves, fill="Phylum") +
+  labs(y = "Relative Abundance") +
+  geom_bar(aes(color=Phylum, fill=Phylum), stat="identity", position="stack") + facet_grid(~timepoint, scale = "free_x") + theme_bw() + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+```
+
+
+
+#Roots
+
+##Subset from minfrac filtered samples
+```{r}
+roots = subset_samples(gomri.minfrac.ps.rel, location == "root")
+```
+
+##Comparing between oil history
+```{r}
+plot_bar(roots, fill="Phylum") +
+  labs(y = "Relative Abundance") +
+  geom_bar(aes(color=Phylum, fill=Phylum), stat="identity", position="stack") + facet_grid(~oil_history, scale = "free_x") + theme_bw() + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+```
+
+
+##Comparing between oil added
+```{r}
+plot_bar(roots, fill="Phylum") +
+  labs(y = "Relative Abundance") +
+  geom_bar(aes(color=Phylum, fill=Phylum), stat="identity", position="stack") + facet_grid(~oil_added, scale = "free_x") + theme_bw() + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+```
+
+##Comparing between timepoint
+```{r}
+plot_bar(roots, fill="Phylum") +
+  labs(y = "Relative Abundance") +
+  geom_bar(aes(color=Phylum, fill=Phylum), stat="identity", position="stack") + facet_grid(~timepoint, scale = "free_x") + theme_bw() + theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
